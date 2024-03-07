@@ -12,7 +12,7 @@ def delayed_requests_get_with_cache(url, use_cache=True):
 
     # Calculate cache file path
     url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()
-    cache_dir = "./data/cache"
+    cache_dir = "W:\_my_data\web_requests_cache"
     cache_path = os.path.join(cache_dir, f"{url_hash}.txt")
 
     # Check cache
@@ -32,6 +32,9 @@ def delayed_requests_get_with_cache(url, use_cache=True):
         response = requests.get(url)
         response.raise_for_status()  # Raises HTTPError for bad responses
         html_content = response.text
+        html_content = response.text.replace(
+            "\r\n", "\n"
+        )  # Normalize newlines to Unix-style
 
         # Ensure cache directory exists
         if not os.path.exists(cache_dir):
@@ -52,6 +55,6 @@ def delayed_requests_get_with_cache(url, use_cache=True):
 
 
 if __name__ == "__main__":
-    url = "https://www.bimmerforums.com/forum/showthread.php?2484316-m20b25-swap-e21-323i-trans"
+    url = "https://www.bimmerforums.com/robots.txt"
     html_content = delayed_requests_get_with_cache(url)
     print(html_content)
