@@ -27,3 +27,6 @@ html5lib
 feedparser
 beautifulsoup4
 html2text
+black
+flake8
+blackcellmagic
