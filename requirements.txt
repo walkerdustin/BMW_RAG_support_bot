@@ -30,3 +30,4 @@ html2text
 black
 flake8
 blackcellmagic
+bidict
