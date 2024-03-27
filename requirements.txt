@@ -31,3 +31,4 @@ black
 flake8
 blackcellmagic
 bidict
+llama-index
