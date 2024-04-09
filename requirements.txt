@@ -12,7 +12,11 @@ html5lib
 ipykernel
 jupyter
 langchain
+llama-parse
 llama-index
+llama-index-embeddings-cohere
+llama-index-embeddings-openai
+llama-index-llms-cohere
 lxml
 markdownify
 matplotlib
@@ -32,3 +36,4 @@ seaborn
 sentencepiece
 termcolor
 tiktoken
+transformers 
