@@ -5,7 +5,6 @@ The system is grounded with data from a BMW forum and the user manuals for the c
 To reduce complexity and cost, the data is limited to data for the 3er and 4er Series of BMW cars.
 In production, the system is meant to pull new or unanswered questions from the forum and try to answer the questions. If applicable, the LLM shall ask for more information.
 
-
 ```mermaid
 flowchart LR
 
@@ -25,7 +24,7 @@ flowchart LR
 
     subgraph indexing
     direction LR
-        embed[OpenAI-small-embedding]
+        embed[OpenAI-large-embedding]
     end
     Llama_index_Vector_store
 
@@ -38,15 +37,27 @@ flowchart LR
     embed --> Llama_index_Vector_store
 
     unanswered_question --> top_k_retrieval
-
+    unanswered_question --> prompt_to_LLM
     Llama_index_Vector_store --> top_k_retrieval
     top_k_retrieval --> prompt_to_LLM
     prompt_to_LLM --> Answer_posted_to_bimmerforums
 ```
 
-## Open Issues
+## Open Issues and Improvements
 
 - quotes are not correctly represented in the markdown of the forum content
+- the text splitting should be markdown aware, to split right before a heading
+- give the model a thinking scratch pad
+- if the model thinks, that it is not confident in its answer, then it should return a special string
+- Optimize the embedding (maybe smaller chunks)
+- experiment with advanced retrieval techniques
+- use Cohere Reranker
+- summarize the unanswered question before the embedding search
+- develop a server, that listens to new unanswered questions and answers them.
+- scrape more data (more subforums)
+- scrape more forums
+- improve user-manuals formatting errors with an LLM
+- use images and linked images, by implementing a multimodal LLM workflow
 
 ## Development Journey
 
@@ -57,16 +68,16 @@ This shows my journey in developing this software
 I chose BMW because I thought BMW owners are the kinds of people, who work on their cars a lot instead of just giving it to the repair shop, so there should be more data on BMW cars out there.
 |Name|num beiträge /1k|notiz|technologie|
 |-|-|-|-|
-|http://www.motor-talk.de/|7767||React|
-|https://bmw-forum.de/|162||vBulletin|
-|http://www.bmw-syndikat.de/|2866||iis server|
-|http://www.auto-treff.com/|946||php|
-|http://www.gs-forum.eu/||nur motorad|firebase|
-|http://www.1erforum.de/|2026|nur 1er und 2er|xenForo|
-|http://www.autotechnik-forum.de/|11||RSS; phpBB|
-|https://www.bimmerforums.com/forum/forum.php|34512|"in englischer Sprache; Crawl-delay: 1600"|RSS; vBulletin 4.2.5|
-|https://www.m-forum.de/forum/index.php|1222||vBulletin|
-|https://www.7-forum.com/forum/|195|nur 7er|vBulletin|
+|<http://www.motor-talk.de/>|7767||React|
+|<https://bmw-forum.de/>|162||vBulletin|
+|<http://www.bmw-syndikat.de/>|2866||iis server|
+|<http://www.auto-treff.com/>|946||php|
+|<http://www.gs-forum.eu/>||nur motorad|firebase|
+|<http://www.1erforum.de/>|2026|nur 1er und 2er|xenForo|
+|<http://www.autotechnik-forum.de/>|11||RSS; phpBB|
+|<https://www.bimmerforums.com/forum/forum.php>|34512|"in englischer Sprache; Crawl-delay: 1600"|RSS; vBulletin 4.2.5|
+|<https://www.m-forum.de/forum/index.php>|1222||vBulletin|
+|<https://www.7-forum.com/forum/>|195|nur 7er|vBulletin|
 
 There are lots of forums in German language, but Bimmerforums is the only one in English language.
 Because most LLMs are primarily trained on English language, Bimmerforums is chosen.
@@ -77,7 +88,7 @@ Because of the financial restraint, the data scraping is limited to the 3er and 
 
 ### get the user manuals
 
-I got most of the pdfs by manually downloading from the official download link https://driversguide.bmw.com/index.html   
+I got most of the pdfs by manually downloading from the official download link <https://driversguide.bmw.com/index.html>
 The rest I got with Google  
 "bmw e21 user manual filetype:pdf"
 
@@ -94,6 +105,7 @@ There are some threads (not shown in the graph below), that have up to 15_705 po
 ### Prepare forum content
 
 Before ingesting the content into my RAG system, I need to prepare the content:
+
 - remove Questions without answers
 - anonymize users
 - remove picture threads (threads with no info, just people showing off their beautiful Bimmers :D)
@@ -144,11 +156,10 @@ Embed model stats:
 | text-embedding-ada-002 | 1536 | 8191 | 0.10 |
 | Cohere-embed-english-v3.0 | 1024 | 512 | 0.10 |
 
-I want to know how many of the threads I can incorporate in just one chunk, 
+I want to know how many of the threads I can incorporate in just one chunk,
 and how many Threads I need to split up.
 
 The following chart shows all 2000 Threads and how many tokens they have
-
 
 ![len_of_threads](./images/len_of_threads.png)
 
@@ -260,3 +271,55 @@ For the embedding, the OpenAI text-embedding-3-large is chosen because it should
 For the Vector Database, the standard LlamaIndex Database is used. Currently, this is Chroma DB.
 Two databases are used, one for the Forum Content and one for the user manuals.
 
+### Retrieval
+
+The QueryPipeline is too confusing to be used. LlamaIndex has implemented some "magic" to make the output and input parameters match, but this magic is hidden and I can not observe what it does and how it works.
+Thus, I was not able to make it work.  
+Instead, the pipeline is chained together simple function.  
+
+```python
+# make my own
+user_query = """Howdy Folks!
+
+First post here. Recently did my OFHG as i was leaking coolant. I threw a check engine light after that read (EGR Cooler B Below Efficiency) so i took it to the dealership since i just had the recall on that done.
+
+Apparently as i was buttoning everything back up i pinched the EGR Cooler Flap Vacuum Hose under the intake. The Dealership told me that i need to replace the whole hose as it's now damaged and they quoted me $2k. Of course i declined service but i wanted to know what you guys think as you guys are quite a bit more knowledgable than me. The OFHG was a little over my pay grade but i enjoyed doing it.
+
+Anyhow, do you think i should order a new hose or can i salvage it and just remove the intake and reroute it correctly? I only ask to avoid pulling the intake twice.
+
+It's currently running like a dream which is nice.
+
+Thanks for your time."""
+
+template = (
+    "You are an expert for BMW Cars. You will get technical questions regarding the 3er and 4er series, or you will solve the Problem, the User has regarding their BMW Car. \n"
+    "You will ground your answer based on Chunks of Information from the User Manual and the Forum Content to answer the User's Question. \n"
+    "---------------------\n"
+    "Chunks of content from the User Manual (The information may be presented in a bad formatting with mistakes in the words): \n"
+    "{user_maual_content}\n"
+    "---------------------\n"
+    "Chunks of content from the Forum Content (This Information is based on content from a Car Forum, so the Information may be incorrect and presented with bad grammar): \n"
+    "{forum_content}\n"
+    "---------------------\n"
+    'Given this information, please answer the question or ask for the specific Information you need: """{query_str}"""\n'
+)
+prompt_tmpl = PromptTemplate(template)
+
+user_maunal_nodes = retriever_user_manuals.retrieve(user_query)
+forum_content_nodes = retriever_forum_content.retrieve(user_query)
+
+# you can create text prompt (for completion API)
+prompt = prompt_tmpl.format(
+    user_maual_content=create_string_from_nodes(user_maunal_nodes),
+    forum_content=create_string_from_nodes(forum_content_nodes),
+    query_str=user_query,
+)
+print("the scores of the retrieved nodes are:")
+for node in user_maunal_nodes:
+    print(node.score)
+for node in forum_content_nodes:
+    print(node.score)
+print(f"Total prompt length is {len(enc.encode(prompt))} tokens")
+res = llm.complete(prompt)
+print(res.text)
+```
